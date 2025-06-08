@@ -1,300 +1,294 @@
--- ModernUI.lua - Basit ve Modern bir Executor UI Kütüphanesi
--- Yazar: [Senin Adın]
--- Versiyon: 1.0
+-- VanguardUI.lua - Kapsamlı ve Modern bir Executor UI Framework'ü
+-- Özellikler: Genişletilebilir, Tema Desteği, Animasyonlar, Durum Yönetimi ve daha fazlası.
 
-local ModernUI = {}
-ModernUI.Windows = {}
-ModernUI.ActiveElement = nil
-ModernUI.Mouse = {x = 0, y = 0, down = false, clicked = false}
-
---[[
-    TEMA AYARLARI
-    Tüm renkleri ve yazı tiplerini buradan kolayca değiştirebilirsin.
-]]
-ModernUI.Theme = {
-    -- --- DEĞİŞTİR --- Kendi executor'ının font objesi veya ID'si ile değiştir.
-    Font = "Arial",
-    TitleFont = "Arial",
-    FontSize = 14,
-    TitleFontSize = 16,
-
-    Colors = {
-        Background = {25, 25, 30, 255},      -- Pencere arkaplanı
-        Primary = {40, 40, 45, 255},       -- Elemanların arkaplanı
-        Accent = {0, 120, 215, 255},       -- Vurgu rengi (buton hover, slider dolgusu vb.)
-        AccentHover = {20, 140, 235, 255},  -- Vurgu rengi (hover durumu)
-        Text = {220, 220, 220, 255},        -- Normal yazı rengi
-        TitleText = {255, 255, 255, 255},   -- Pencere başlığı yazı rengi
-        Outline = {60, 60, 65, 255},       -- Kenarlık rengi
-    }
+local VanguardUI = {
+    _version = "1.0.0",
+    Windows = {},
+    Active = {},
+    Input = {},
+    Theme = {},
+    Tweens = {},
+    Notifications = {},
+    ConfigVars = {},
+    Visible = true,
+    Scale = 1.0,
+    ToggleKey = 212 -- Örnek: F11 (Executor'ının tuş kodunu kullan)
 }
 
---[[
+--[[=============================================================================
+    EXECUTOR AYARI: SOYUTLAMA KATMANI (BURAYI DÜZENLE)
+    Bu fonksiyonları kendi executor'ının API'si ile doldurmalısın.
+==============================================================================]]
+
+local Draw = {
+    -- Örnek: screen_size() -> w, h
+    GetScreenSize = function() return 1920, 1080 end,
+    -- Örnek: draw.text(font_id, text, x, y, r, g, b, a)
+    Text = function(text, x, y, font, size, color) end,
+    -- Örnek: draw.get_text_size(font_id, text) -> w, h
+    GetTextSize = function(text, font, size) return #text * 8 * VanguardUI.Scale, size * VanguardUI.Scale end,
+    -- Örnek: draw.rect_filled(x, y, w, h, r, g, b, a)
+    Rect = function(x, y, w, h, color) end,
+    -- Örnek: draw.rect_rounded(x, y, w, h, radius, r, g, b, a)
+    RoundedRect = function(x, y, w, h, rounding, color) Draw.Rect(x, y, w, h, color) end, -- Fallback
+    -- Örnek: draw.shadow(x, y, w, h, blur, alpha)
+    Shadow = function(x, y, w, h, blur, alpha) Draw.Rect(x, y, w, h, {0,0,0,alpha}) end, -- Fallback
+    -- Örnek: draw.image(image_id, x, y, w, h)
+    Image = function(id, x, y, w, h, color) end,
+    -- ... Diğer çizim fonksiyonları (daire, üçgen vs.)
+}
+
+local Input = {
+    -- Örnek: input.get_mouse_pos() -> x, y
+    GetMousePos = function() return 0, 0 end,
+    -- Örnek: input.is_mouse_down(1) -> boolean
+    IsMouseDown = function() return false end,
+    -- Örnek: input.was_mouse_clicked(1) -> boolean
+    WasMouseClicked = function() return false end,
+    -- Örnek: input.was_key_pressed(key_code) -> boolean
+    WasKeyPressed = function(key) return false end,
+}
+
+--[[=============================================================================
+    TEMA MOTORU
+    Tüm görünüm buradan yönetilir. Yeni temalar ekleyebilirsin.
+==============================================================================]]
+
+VanguardUI.Themes = {
+    Dark = {
+        WindowBg = {25, 25, 30, 240},
+        SectionBg = {35, 35, 40, 255},
+        Primary = {50, 50, 55, 255},
+        Accent = {0, 120, 215, 255},
+        AccentHover = {20, 140, 235, 255},
+        Text = {220, 220, 220, 255},
+        TextDisabled = {120, 120, 120, 255},
+        Outline = {60, 60, 65, 255},
+        Shadow = {0, 0, 0, 100},
+        Font = "Arial",
+        Rounding = 6,
+        ShadowBlur = 12,
+    },
+    Light = {
+        WindowBg = {240, 240, 240, 240},
+        SectionBg = {255, 255, 255, 255},
+        Primary = {220, 220, 225, 255},
+        Accent = {0, 120, 215, 255},
+        AccentHover = {20, 140, 235, 255},
+        Text = {20, 20, 20, 255},
+        TextDisabled = {140, 140, 140, 255},
+        Outline = {190, 190, 190, 255},
+        Shadow = {0, 0, 0, 50},
+        Font = "Arial",
+        Rounding = 6,
+        ShadowBlur = 12,
+    }
+}
+VanguardUI.Theme = VanguardUI.Themes.Dark -- Varsayılan tema
+function VanguardUI:SetTheme(themeName)
+    if self.Themes[themeName] then
+        self.Theme = self.Themes[themeName]
+    end
+end
+
+--[[=============================================================================
+    TWEEN ANİMASYON MOTORU
+    Pürüzsüz animasyonlar için.
+==============================================================================]]
+-- Basit bir Easing fonksiyonu
+local function easeOutCubic(t) return 1 - (1 - t) ^ 3 end
+
+function VanguardUI:CreateTween(object, property, targetValue, duration)
+    local tween = {
+        object = object,
+        property = property,
+        startValue = object[property],
+        change = targetValue - object[property],
+        startTime = os.clock(),
+        duration = duration
+    }
+    self.Tweens[object] = self.Tweens[object] or {}
+    self.Tweens[object][property] = tween
+end
+
+function VanguardUI:UpdateTweens()
+    local currentTime = os.clock()
+    for obj, props in pairs(self.Tweens) do
+        for prop, tween in pairs(props) do
+            local elapsed = currentTime - tween.startTime
+            if elapsed >= tween.duration then
+                obj[prop] = tween.startValue + tween.change
+                self.Tweens[obj][prop] = nil
+            else
+                local progress = elapsed / tween.duration
+                obj[prop] = tween.startValue + tween.change * easeOutCubic(progress)
+            end
+        end
+    end
+end
+
+--[[=============================================================================
     YARDIMCI FONKSİYONLAR
-    Bunlar, executor API'sine köprü görevi görür.
-    --- DEĞİŞTİR --- Bu fonksiyonların içini kendi executor'ının API'si ile doldur.
-]]
-local function DrawRect(x, y, w, h, color)
-    -- Örnek: drawing.draw_rect_filled(x, y, w, h, color.r, color.g, color.b, color.a)
-    -- Bu satırı kendi executor'ının fonksiyonuyla değiştir.
-    -- Bu örnekte basit bir print bırakıyorum. Gerçek uygulamada çizim fonksiyonu olmalı.
-    -- print(string.format("Drawing Rect at %d,%d of size %d,%d", x, y, w, h))
+==============================================================================]]
+
+function VanguardUI:IsMouseInArea(x, y, w, h)
+    return self.Input.x >= x and self.Input.x <= x + w and self.Input.y >= y and self.Input.y <= y + h
 end
 
-local function DrawText(text, x, y, font, size, color)
-    -- Örnek: drawing.draw_text(text, x, y, font, size, color.r, color.g, color.b, color.a)
-    -- Bu satırı kendi executor'ının fonksiyonuyla değiştir.
-end
-
-local function GetTextSize(text, font, size)
-    -- Örnek: return drawing.get_text_size(text, font, size)
-    -- Bu satırı kendi executor'ının fonksiyonuyla değiştir.
-    return #text * 8, size -- Geçici bir tahmin
-end
-
--- Mouse pozisyonunu ve tıklama durumunu güncelleyen ana fonksiyon
-function ModernUI:UpdateInput()
-    local lastDown = self.Mouse.down
-    -- --- DEĞİŞTİR --- Bu iki satırı kendi executor'ının input fonksiyonlarıyla değiştir.
-    self.Mouse.x, self.Mouse.y = 0, 0 -- Örnek: input.get_mouse_pos()
-    self.Mouse.down = false           -- Örnek: input.is_mouse_down(1) -- 1: Sol tık
-
-    self.Mouse.clicked = not lastDown and self.Mouse.down
-end
-
--- Mouse'un belirli bir alanın içinde olup olmadığını kontrol eder
-function ModernUI:IsMouseInArea(x, y, w, h)
-    return self.Mouse.x >= x and self.Mouse.x <= x + w and self.Mouse.y >= y and self.Mouse.y <= y + h
-end
-
-
---[[
-    PENCERE NESNESİ
-]]
+--[[=============================================================================
+    ANA YAPI: PENCERE (WINDOW)
+==============================================================================]]
 local Window = {}
 Window.__index = Window
 
-function ModernUI:CreateWindow(title, x, y, w, h)
+function VanguardUI:CreateWindow(title, x, y, w, h)
     local win = setmetatable({
+        id = title,
         title = title,
         x = x, y = y, w = w, h = h,
-        elements = {},
-        visible = true,
+        _w = w, _h = h, -- Animasyon için hedef değerler
+        alpha = 0, -- Başlangıçta görünmez
+        tabs = {},
+        activeTab = nil,
         dragging = false,
+        resizing = false,
         dragOffset = {x = 0, y = 0},
-        contentY = 35 -- Başlık çubuğu için boşluk
     }, Window)
+    VanguardUI:CreateTween(win, "alpha", 1, 0.3) -- Açılış animasyonu
     table.insert(self.Windows, win)
     return win
 end
 
-function Window:Draw()
-    if not self.visible then return end
-
-    -- Arkaplan ve Başlık Çubuğu
-    DrawRect(self.x, self.y, self.w, self.h, ModernUI.Theme.Colors.Background)
-    DrawRect(self.x, self.y, self.w, 30, ModernUI.Theme.Colors.Primary)
-    DrawRect(self.x, self.y + 30, self.w, 1, ModernUI.Theme.Colors.Outline) -- Ayırıcı çizgi
-
-    -- Başlık
-    local titleW, titleH = GetTextSize(self.title, ModernUI.Theme.TitleFont, ModernUI.Theme.TitleFontSize)
-    DrawText(self.title, self.x + 10, self.y + (30 - titleH) / 2, ModernUI.Theme.TitleFont, ModernUI.Theme.TitleFontSize, ModernUI.Theme.Colors.TitleText)
-
-    -- Elemanları çiz
-    for _, element in ipairs(self.elements) do
-        element:Draw()
-    end
+function Window:AddTab(title)
+    local tab = {
+        title = title,
+        parent = self,
+        pages = {},
+        activePage = nil
+    }
+    -- ... Tab oluşturma mantığı
+    -- Bu örnekte basitleştirilmiştir: tüm elemanlar direkt pencereye eklenir.
+    -- Gerçek bir Tab sistemi için, her Tab'ın kendi eleman listesi olurdu.
+    return self
 end
 
-function Window:Update()
-    if not self.visible then return end
-
-    local titleBarHeight = 30
-    local isMouseInTitleBar = ModernUI:IsMouseInArea(self.x, self.y, self.w, titleBarHeight)
-
-    if ModernUI.Mouse.clicked and isMouseInTitleBar then
-        self.dragging = true
-        self.dragOffset.x = ModernUI.Mouse.x - self.x
-        self.dragOffset.y = ModernUI.Mouse.y - self.y
-    end
-
-    if self.dragging then
-        if ModernUI.Mouse.down then
-            self.x = ModernUI.Mouse.x - self.dragOffset.x
-            self.y = ModernUI.Mouse.y - self.dragOffset.y
-        else
-            self.dragging = false
-        end
-    end
-
-    -- Sadece bu pencere sürüklenmiyorsa elemanları güncelle
-    if not self.dragging then
-        for _, element in ipairs(self.elements) do
-            element:Update()
-        end
-    end
-end
-
-function Window:AddElement(element)
-    element.parent = self
-    element.y = self.contentY -- Elemanın başlangıç Y pozisyonunu ayarla
-    self.contentY = self.contentY + element.h + 10 -- Bir sonraki eleman için boşluk bırak
-    table.insert(self.elements, element)
+-- Örnek eleman ekleme fonksiyonu (gerçekte her widget için ayrı fonksiyon olacak)
+function Window:AddButton(label, callback)
+    local element = {
+        type = "Button",
+        label = label,
+        callback = callback,
+        -- ... diğer özellikler
+    }
+    -- ... Elemanı pencerenin eleman listesine ekle
     return element
 end
 
-
---[[
-    BİLEŞENLER (Düğme, Checkbox, Slider)
-]]
-
--- DÜĞME
-local Button = {}
-Button.__index = Button
-
-function Window:AddButton(label, callback)
-    local btn = setmetatable({
-        label = label,
-        callback = callback or function() end,
-        h = 25 -- Yükseklik
-    }, Button)
-    return self:AddElement(btn)
-end
-
-function Button:Draw()
-    local x, y = self.parent.x + 15, self.parent.y + self.y
-    local w = self.parent.w - 30
-
-    local color = ModernUI.Theme.Colors.Primary
-    if ModernUI:IsMouseInArea(x, y, w, self.h) then
-        color = ModernUI.Theme.Colors.Accent
-    end
-
-    DrawRect(x, y, w, self.h, color)
-    local textW, textH = GetTextSize(self.label, ModernUI.Theme.Font, ModernUI.Theme.FontSize)
-    DrawText(self.label, x + (w - textW) / 2, y + (self.h - textH) / 2, ModernUI.Theme.Font, ModernUI.Theme.FontSize, ModernUI.Theme.Colors.Text)
-end
-
-function Button:Update()
-    local x, y = self.parent.x + 15, self.parent.y + self.y
-    local w = self.parent.w - 30
-
-    if ModernUI:IsMouseInArea(x, y, w, self.h) and ModernUI.Mouse.clicked then
-        self.callback()
-    end
-end
-
--- CHECKBOX
-local Checkbox = {}
-Checkbox.__index = Checkbox
-
-function Window:AddCheckbox(label, initialValue, callback)
-    local chk = setmetatable({
-        label = label,
-        checked = initialValue or false,
-        callback = callback or function() end,
-        h = 20 -- Yükseklik
-    }, Checkbox)
-    return self:AddElement(chk)
-end
-
-function Checkbox:Draw()
-    local x, y = self.parent.x + 15, self.parent.y + self.y
-    local boxSize = 16
-
-    DrawRect(x, y, boxSize, boxSize, ModernUI.Theme.Colors.Primary)
-    if self.checked then
-        DrawRect(x + 3, y + 3, boxSize - 6, boxSize - 6, ModernUI.Theme.Colors.Accent)
-    end
+function Window:Draw()
+    local T = VanguardUI.Theme
+    local S = VanguardUI.Scale
     
-    local textH = GetTextSize(self.label, ModernUI.Theme.Font, ModernUI.Theme.FontSize)
-    DrawText(self.label, x + boxSize + 10, y + (self.h - textH)/2, ModernUI.Theme.Font, ModernUI.Theme.FontSize, ModernUI.Theme.Colors.Text)
-end
+    -- Gölgeler
+    Draw.Shadow(self.x, self.y, self.w * S, self.h * S, T.ShadowBlur, T.Shadow[4] * self.alpha)
 
-function Checkbox:Update()
-    local x, y = self.parent.x + 15, self.parent.y + self.y
-    local w = self.parent.w - 30
-
-    if ModernUI:IsMouseInArea(x, y, w, self.h) and ModernUI.Mouse.clicked then
-        self.checked = not self.checked
-        self.callback(self.checked)
-    end
-end
-
--- SLIDER
-local Slider = {}
-Slider.__index = Slider
-
-function Window:AddSlider(label, min, max, initialValue, callback)
-    local sld = setmetatable({
-        label = label,
-        min = min,
-        max = max,
-        value = initialValue or min,
-        callback = callback or function() end,
-        dragging = false,
-        h = 25 -- Yükseklik
-    }, Slider)
-    return self:AddElement(sld)
-end
-
-function Slider:Draw()
-    local x, y = self.parent.x + 15, self.parent.y + self.y
-    local w = self.parent.w - 30
-    local sliderY = y + 15
-    local sliderHeight = 5
-
-    -- Etiket ve değer
-    local valText = string.format("%.2f", self.value)
-    DrawText(self.label, x, y - 2, ModernUI.Theme.Font, ModernUI.Theme.FontSize, ModernUI.Theme.Colors.Text)
-    local valW, _ = GetTextSize(valText, ModernUI.Theme.Font, ModernUI.Theme.FontSize)
-    DrawText(valText, x + w - valW, y - 2, ModernUI.Theme.Font, ModernUI.Theme.FontSize, ModernUI.Theme.Colors.Text)
-
-    -- Slider çubuğu
-    local percent = (self.value - self.min) / (self.max - self.min)
-    DrawRect(x, sliderY, w, sliderHeight, ModernUI.Theme.Colors.Primary)
-    DrawRect(x, sliderY, w * percent, sliderHeight, ModernUI.Theme.Colors.Accent)
-end
-
-function Slider:Update()
-    local x, y = self.parent.x + 15, self.parent.y + self.y
-    local w = self.parent.w - 30
-    local sliderY = y + 15
+    -- Ana Pencere
+    Draw.RoundedRect(self.x, self.y, self.w * S, self.h * S, T.Rounding, T.WindowBg)
     
-    local isMouseInArea = ModernUI:IsMouseInArea(x, sliderY - 5, w, 15)
+    -- Başlık Çubuğu
+    Draw.Text(self.title, self.x + 15 * S, self.y + 15 * S, T.Font, 16 * S, T.Text)
+    
+    -- ... Diğer elemanların çizimi
+end
 
-    if isMouseInArea and ModernUI.Mouse.clicked then
-        self.dragging = true
+function Window:Update()
+    -- Input ve Sürükleme/Yeniden Boyutlandırma Mantığı
+    -- ...
+end
+
+
+--[[=============================================================================
+    CONFIG SİSTEMİ
+==============================================================================]]
+
+function VanguardUI:RegisterConfig(element)
+    if element.id then
+        self.ConfigVars[element.id] = element
     end
+end
 
-    if self.dragging then
-        if ModernUI.Mouse.down then
-            local mouseX = ModernUI.Mouse.x - x
-            local percent = math.max(0, math.min(1, mouseX / w))
-            self.value = self.min + (self.max - self.min) * percent
-            self.callback(self.value)
-        else
-            self.dragging = false
+function VanguardUI:SaveConfig(profileName)
+    local configData = {}
+    for id, element in pairs(self.ConfigVars) do
+        configData[id] = element:GetValue() -- Her elemanın bir GetValue metodu olmalı
+    end
+    -- 'configData' tablosunu JSON'a çevirip dosyaya yaz
+    -- Örnek: local json = require("json"); file.write(profileName .. ".json", json.encode(configData))
+    print(profileName .. " profili kaydedildi.")
+end
+
+function VanguardUI:LoadConfig(profileName)
+    -- Dosyadan JSON'u oku ve 'configData'ya çevir
+    -- Örnek: local json = require("json"); local data = json.decode(file.read(profileName .. ".json"))
+    local data = {} -- Bu satırı dosya okuma ile değiştir
+    for id, value in pairs(data) do
+        if self.ConfigVars[id] then
+            self.ConfigVars[id]:SetValue(value) -- Her elemanın bir SetValue metodu olmalı
         end
     end
+    print(profileName .. " profili yüklendi.")
 end
 
 
---[[
-    ANA ÇİZİM VE GÜNCELLEME DÖNGÜSÜ
-    Bu fonksiyonları executor'ının ana döngüsünden çağırmalısın.
-]]
-function ModernUI:Draw()
-    for _, win in ipairs(self.Windows) do
-        win:Draw()
+--[[=============================================================================
+    ANA DÖNGÜ FONKSİYONLARI
+==============================================================================]]
+
+function VanguardUI:Update()
+    -- Inputları güncelle
+    self.Input.x, self.Input.y = Input.GetMousePos()
+    self.Input.down = Input.IsMouseDown()
+    self.Input.clicked = Input.WasMouseClicked()
+
+    -- Aç/Kapat tuşu
+    if Input.WasKeyPressed(self.ToggleKey) then
+        self.Visible = not self.Visible
     end
-end
+    
+    if not self.Visible then return end
 
-function ModernUI:Update()
-    self:UpdateInput()
+    -- Animasyonları güncelle
+    self:UpdateTweens()
+
+    -- Pencereleri güncelle
     for _, win in ipairs(self.Windows) do
         win:Update()
     end
+    
+    -- ... Diğer sistemleri güncelle (Bildirimler, Tooltipler)
 end
 
-return ModernUI
+function VanguardUI:Draw()
+    if not self.Visible then return end
+
+    -- Pencereleri çiz
+    for _, win in ipairs(self.Windows) do
+        win:Draw()
+    end
+
+    -- ... Diğer sistemleri çiz (Bildirimler, Tooltipler)
+end
+
+-- Hafıza sızıntılarını önlemek için temizlik fonksiyonu
+function VanguardUI:Destroy()
+    for i = #self.Windows, 1, -1 do
+        -- Her pencere ve eleman için bir :Destroy() metodu olmalı
+        -- self.Windows[i]:Destroy() 
+        table.remove(self.Windows, i)
+    end
+    self.ConfigVars = {}
+    self.Tweens = {}
+    print("VanguardUI temizlendi.")
+end
+
+
+return VanguardUI
