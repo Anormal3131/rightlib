@@ -1,4 +1,10 @@
+-- SimpleUI Kütüphanesi
+-- Yazar: (Orijinal + Geliştirmeler)
+-- Sürüm: 2.0
+
 local SimpleUI = {}
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
 
 -- Helper function: create instance with properties and parent
 local function newInstance(class, props, parent)
@@ -22,22 +28,22 @@ function SimpleUI.new(title)
         Name = "SimpleUI_"..tostring(math.random(1,9999)),
         IgnoreGuiInset = true,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    }, game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"))
+    }, Players.LocalPlayer:WaitForChild("PlayerGui"))
 
     -- Ana pencere Frame
     local mainFrame = newInstance("Frame", {
-        Size = UDim2.new(0, 400, 0, 300),
-        Position = UDim2.new(0.5, -200, 0.5, -150),
+        Size = UDim2.new(0, 450, 0, 350), -- Biraz daha geniş
+        Position = UDim2.new(0.5, -225, 0.5, -175),
         BackgroundColor3 = Color3.fromRGB(30,30,40),
         BorderSizePixel = 0,
-        ClipsDescendants = false,
+        ClipsDescendants = true, -- Köşeleri yuvarlatmak için
         Active = true,
-        Draggable = true, -- Klasik draggable ama daha modern çözüme geçilebilir
+        Draggable = true,
         ZIndex = 10,
-        AnchorPoint = Vector2.new(0,0),
         Visible = true,
         Name = "MainWindow"
     }, screenGui)
+    newInstance("UICorner", { CornerRadius = UDim.new(0, 8) }, mainFrame) -- Köşeleri yuvarlatma
 
     -- Başlık Bar
     local titleBar = newInstance("Frame", {
@@ -52,7 +58,7 @@ function SimpleUI.new(title)
     local titleLabel = newInstance("TextLabel", {
         Text = title or "SimpleUI",
         Font = Enum.Font.GothamBold,
-        TextSize = 18,
+        TextSize = 16,
         TextColor3 = Color3.fromRGB(220,220,220),
         BackgroundTransparency = 1,
         Size = UDim2.new(1, -40, 1, 0),
@@ -66,8 +72,8 @@ function SimpleUI.new(title)
     local closeButton = newInstance("TextButton", {
         Text = "X",
         Font = Enum.Font.GothamBold,
-        TextSize = 18,
-        TextColor3 = Color3.fromRGB(220, 70, 70),
+        TextSize = 16,
+        TextColor3 = Color3.fromRGB(220, 220, 220),
         BackgroundTransparency = 1,
         Size = UDim2.new(0, 30, 1, 0),
         Position = UDim2.new(1, -30, 0, 0),
@@ -77,10 +83,14 @@ function SimpleUI.new(title)
         Name = "CloseButton"
     })
 
+    closeButton.MouseEnter:Connect(function() closeButton.TextColor3 = Color3.fromRGB(255, 80, 80) end)
+    closeButton.MouseLeave:Connect(function() closeButton.TextColor3 = Color3.fromRGB(220, 220, 220) end)
     closeButton.MouseButton1Click:Connect(function()
-        mainFrame.Visible = false
+        mainFrame:TweenSize(UDim2.new(0, 450, 0, 0), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.2, true, function()
+            screenGui:Destroy()
+        end)
     end)
-
+    
     -- Sekme çubuğu (Tab Bar)
     local tabBar = newInstance("Frame", {
         Size = UDim2.new(1, 0, 0, 30),
@@ -91,22 +101,29 @@ function SimpleUI.new(title)
         ZIndex = 11,
         Name = "TabBar"
     })
+    newInstance("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 5)
+    }, tabBar)
 
     local tabs = {}
     local selectedTab = nil
 
     -- İçerik alanı
-    local contentFrame = newInstance("Frame", {
-        Size = UDim2.new(1, -20, 1, -60),
-        Position = UDim2.new(0, 10, 0, 60),
+    local contentFrame = newInstance("ScrollingFrame", { -- ScrollingFrame olarak değiştirildi
+        Size = UDim2.new(1, 0, 1, -60),
+        Position = UDim2.new(0, 0, 0, 60),
         BackgroundColor3 = Color3.fromRGB(35, 35, 50),
         BorderSizePixel = 0,
-        ClipsDescendants = true,
         Parent = mainFrame,
         ZIndex = 10,
-        Name = "ContentFrame"
+        Name = "ContentFrame",
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        ScrollBarImageColor3 = Color3.fromRGB(100, 150, 255),
+        ScrollBarThickness = 5,
     })
-
+    
     -- Sekme ekleme fonksiyonu
     function self:new_tab(name)
         local tabButton = newInstance("TextButton", {
@@ -119,22 +136,33 @@ function SimpleUI.new(title)
             Size = UDim2.new(0, 100, 1, 0),
             Parent = tabBar,
             ZIndex = 12,
-            Name = "Tab_"..name
+            Name = "Tab_"..name,
+            AutoButtonColor = false,
         })
 
         local tabContent = newInstance("Frame", {
-            Size = UDim2.new(1, 0, 1, 0),
+            Size = UDim2.new(1, 0, 0, 0), -- Boyut otomatik ayarlanacak
+            AutomaticSize = Enum.AutomaticSize.Y, -- Otomatik boyutlandırma
             BackgroundTransparency = 1,
             Visible = false,
             Parent = contentFrame,
             ZIndex = 10,
             Name = "TabContent_"..name
         })
+        newInstance("UIListLayout", {
+            FillDirection = Enum.FillDirection.Vertical,
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Padding = UDim.new(0, 10),
+        }, tabContent)
+        newInstance("UIPadding", {
+            PaddingTop = UDim.new(0, 10),
+            PaddingBottom = UDim.new(0, 10)
+        }, tabContent)
 
-        local sections = {}
 
-        -- Butona basılınca sekmeyi göster
-        tabButton.MouseButton1Click:Connect(function()
+        local tabData = {button = tabButton, content = tabContent, sections = {}}
+        
+        local function selectTab()
             -- Diğer tüm sekmeleri gizle
             for _, t in pairs(tabs) do
                 t.content.Visible = false
@@ -145,26 +173,45 @@ function SimpleUI.new(title)
             tabButton.BackgroundColor3 = Color3.fromRGB(70, 70, 110)
             tabButton.TextColor3 = Color3.fromRGB(255,255,255)
             selectedTab = tabContent
-        end)
-
-        -- Otomatik olarak ilk sekmeyi seç (ilk sekme ise)
-        if #tabs == 0 then
-            tabButton.MouseButton1Click:Wait()
+            -- ScrollingFrame'in boyutunu güncelle
+            task.wait() -- UIListLayout'un hesaplama yapması için kısa bir bekleme
+            contentFrame.CanvasSize = UDim2.new(0, 0, 0, tabContent.AbsoluteSize.Y)
         end
+        
+        tabButton.MouseButton1Click:Connect(selectTab)
 
-        local tabData = {button = tabButton, content = tabContent, sections = sections}
+        table.insert(tabs, tabData)
+        
+        -- Otomatik olarak ilk sekmeyi seç
+        if #tabs == 1 then
+            selectTab()
+        end
 
         -- Bölüm ekleme fonksiyonu
         function tabData:new_section(name)
             local sectionFrame = newInstance("Frame", {
-                Size = UDim2.new(1, -20, 0, 100),
+                Size = UDim2.new(1, -20, 0, 0), -- Yükseklik otomatik olacak
+                AutomaticSize = Enum.AutomaticSize.Y, -- Otomatik yükseklik
                 BackgroundColor3 = Color3.fromRGB(45, 45, 60),
                 BorderSizePixel = 0,
-                Position = UDim2.new(0, 10, 0, (#sections) * 110),
+                Position = UDim2.new(0.5, 0, 0, 0),
+                AnchorPoint = Vector2.new(0.5, 0),
                 Parent = tabContent,
                 ZIndex = 10,
                 Name = "Section_"..name
             })
+            newInstance("UICorner", { CornerRadius = UDim.new(0, 6) }, sectionFrame)
+            newInstance("UIListLayout", {
+                FillDirection = Enum.FillDirection.Vertical,
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Padding = UDim.new(0, 8),
+            }, sectionFrame)
+            newInstance("UIPadding", {
+                PaddingLeft = UDim.new(0, 10),
+                PaddingRight = UDim.new(0, 10),
+                PaddingTop = UDim.new(0, 10),
+                PaddingBottom = UDim.new(0, 10)
+            }, sectionFrame)
 
             local sectionLabel = newInstance("TextLabel", {
                 Text = name,
@@ -173,564 +220,222 @@ function SimpleUI.new(title)
                 TextColor3 = Color3.fromRGB(210, 210, 230),
                 BackgroundTransparency = 1,
                 Size = UDim2.new(1, 0, 0, 25),
-                Position = UDim2.new(0, 10, 0, 10),
+                TextXAlignment = Enum.TextXAlignment.Left,
                 Parent = sectionFrame,
                 ZIndex = 11,
                 Name = "SectionLabel"
             })
+            
+            local sectionData = {}
+            
+            --[[ ELEMENT EKLEME FONKSİYONLARI ]]--
 
-            local elements = {}
-            local elementY = 40
-
-            local function addElement(type_, text, default, callback)
-                local el
-
-                if type_ == "Button" then
-                    el = newInstance("TextButton", {
-                        Text = text,
-                        Font = Enum.Font.Gotham,
-                        TextSize = 14,
-                        TextColor3 = Color3.fromRGB(230,230,230),
-                        BackgroundColor3 = Color3.fromRGB(70, 70, 110),
-                        BorderSizePixel = 0,
-                        Size = UDim2.new(1, -20, 0, 30),
-                        Position = UDim2.new(0, 10, 0, elementY),
-                        Parent = sectionFrame,
-                        ZIndex = 12,
-                        Name = "Button_"..text,
-                    })
-
-                    el.MouseButton1Click:Connect(function()
-                        if callback then callback() end
-                    end)
-
-                elseif type_ == "Toggle" then
-                    local toggled = default or false
-
-                    el = newInstance("Frame", {
-                        Size = UDim2.new(1, -20, 0, 30),
-                        Position = UDim2.new(0, 10, 0, elementY),
-                        BackgroundTransparency = 1,
-                        Parent = sectionFrame,
-                        ZIndex = 12,
-                        Name = "Toggle_"..text,
-                    })
-
-                    local label = newInstance("TextLabel", {
-                        Text = text,
-                        Font = Enum.Font.Gotham,
-                        TextSize = 14,
-                        TextColor3 = Color3.fromRGB(230,230,230),
-                        BackgroundTransparency = 1,
-                        Size = UDim2.new(0.8, 0, 1, 0),
-                        Position = UDim2.new(0, 0, 0, 0),
-                        Parent = el,
-                        ZIndex = 13,
-                    })
-
-                    local box = newInstance("Frame", {
-                        Size = UDim2.new(0, 24, 0, 24),
-                        Position = UDim2.new(0.85, 0, 0.1, 0),
-                        BackgroundColor3 = toggled and Color3.fromRGB(100, 150, 255) or Color3.fromRGB(70, 70, 110),
-                        BorderSizePixel = 0,
-                        Parent = el,
-                        ZIndex = 13,
-                        Name = "ToggleBox"
-                    })
-
-                    local check = newInstance("TextLabel", {
-                        Text = "✓",
-                        Font = Enum.Font.GothamBold,
-                        TextSize = 20,
-                        TextColor3 = Color3.fromRGB(220,220,220),
-                        BackgroundTransparency = 1,
-                        Visible = toggled,
-                        Size = UDim2.new(1, 0, 1, 0),
-                        Parent = box,
-                        ZIndex = 14,
-                        Name = "Checkmark"
-                    })
-
-                    el.InputBegan:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                            toggled = not toggled
-                            box.BackgroundColor3 = toggled and Color3.fromRGB(100,150,255) or Color3.fromRGB(70,70,110)
-                            check.Visible = toggled
-                            if callback then callback({Toggle = toggled}) end
-                        end
-                    end)
-
-                elseif type_ == "Dropdown" then
-                    local options = default.options or {}
-                    local currentIndex = 1
-                    local isOpen = false
-
-                    el = newInstance("Frame", {
-                        Size = UDim2.new(1, -20, 0, 30),
-                        Position = UDim2.new(0, 10, 0, elementY),
-                        BackgroundColor3 = Color3.fromRGB(70, 70, 110),
-                        BorderSizePixel = 0,
-                        Parent = sectionFrame,
-                        ZIndex = 20,
-                        Name = "Dropdown_"..text,
-                        ClipsDescendants = false
-                    })
-
-                    local label = newInstance("TextLabel", {
-                        Text = text,
-                        Font = Enum.Font.Gotham,
-                        TextSize = 14,
-                        TextColor3 = Color3.fromRGB(230,230,230),
-                        BackgroundTransparency = 1,
-                        Size = UDim2.new(0.7, 0, 1, 0),
-                        Position = UDim2.new(0, 10, 0, 0),
-                        Parent = el,
-                        ZIndex = 21,
-                    })
-
-                    local selectedLabel = newInstance("TextLabel", {
-                        Text = options[currentIndex] or "Select",
-                        Font = Enum.Font.Gotham,
-                        TextSize = 14,
-                        TextColor3 = Color3.fromRGB(230,230,230),
-                        BackgroundTransparency = 1,
-                        Size = UDim2.new(0.2, 0, 1, 0),
-                        Position = UDim2.new(0.75, 0, 0, 0),
-                        TextXAlignment = Enum.TextXAlignment.Right,
-                        Parent = el,
-                        ZIndex = 21,
-                        Name = "SelectedLabel"
-                    })
-
-                    local arrow = newInstance("TextLabel", {
-                        Text = "▼",
-                        Font = Enum.Font.Gotham,
-                        TextSize = 14,
-                        TextColor3 = Color3.fromRGB(230,230,230),
-                        BackgroundTransparency = 1,
-                        Size = UDim2.new(0, 15, 1, 0),
-                        Position = UDim2.new(1, -20, 0, 0),
-                        Parent = el,
-                        ZIndex = 21,
-                    })
-
-                    -- Dropdown liste container
-                    local listContainer = newInstance("Frame", {
-                        Size = UDim2.new(1, 0, 0, 0),
-                        Position = UDim2.new(0, 0, 1, 0),
-                        BackgroundColor3 = Color3.fromRGB(60, 60, 100),
-                        BorderSizePixel = 0,
-                        ClipsDescendants = true,
-                        Parent = el,
-                        ZIndex = 25,
-                        Name = "ListContainer"
-                    })
-
-                    -- Liste elemanlarını yarat
-                    local itemHeight = 30
-                    local itemFrames = {}
-
-                    for i, option in ipairs(options) do
-                        local item = newInstance("TextButton", {
-                            Text = option,
-                            Font = Enum.Font.Gotham,
-                            TextSize = 14,
-                            TextColor3 = Color3.fromRGB(230,230,230),
-                            BackgroundColor3 = Color3.fromRGB(80, 80, 130),
-                            BorderSizePixel = 0,
-                            Size = UDim2.new(1, 0, 0, itemHeight),
-                            Position = UDim2.new(0, 0, 0, (i-1) * itemHeight),
-                            Parent = listContainer,
-                            ZIndex = 26,
-                            Name = "Item_"..option,
-                        })
-
-                        item.MouseEnter:Connect(function()
-                            item.BackgroundColor3 = Color3.fromRGB(110, 110, 170)
-                        end)
-                        item.MouseLeave:Connect(function()
-                            item.BackgroundColor3 = Color3.fromRGB(80, 80, 130)
-                        end)
-
-                        item.MouseButton1Click:Connect(function()
-                            currentIndex = i
-                            selectedLabel.Text = option
-                            if callback then
-                                callback({Dropdown = option})
-                            end
-                            -- Kapat
-                            isOpen = false
-                            listContainer:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
-                        end)
-
-                        table.insert(itemFrames, item)
-                    end
-
-                    -- Aç/kapa işlemi
-                    el.MouseButton1Click:Connect(function()
-                        if isOpen then
-                            isOpen = false
-                            listContainer:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
-                        else
-                            isOpen = true
-                            listContainer:TweenSize(UDim2.new(1, 0, 0, #options * itemHeight), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
-                        end
-                    end)
-
-                    -- Alternatif aç/kapa için ok üzerine tıklama
-                    arrow.MouseButton1Click:Connect(function()
-                        el:MouseButton1Click()
-                    end)
-
-                elseif type_ == "Slider" then
-                    local min = default.min or 0
-                    local max = default.max or 100
-                    local value = default.default or min
-                    local dragging = false
-
-                    el = newInstance("Frame", {
-                        Size = UDim2.new(1, -20, 0, 30),
-                        Position = UDim2.new(0, 10, 0, elementY),
-                        BackgroundColor3 = Color3.fromRGB(70, 70, 110),
-                        BorderSizePixel = 0,
-                        Parent = sectionFrame,
-                        ZIndex = 20,
-                        Name = "Slider_"..text,
-                    })
-
-                    local label = newInstance("TextLabel", {
-                        Text = text,
-                        Font = Enum.Font.Gotham,
-                        TextSize = 14,
-                        TextColor3 = Color3.fromRGB(230,230,230),
-                        BackgroundTransparency = 1,
-                        Size = UDim2.new(0.6, 0, 1, 0),
-                        Position = UDim2.new(0, 10, 0, 0),
-                        Parent = el,
-                        ZIndex = 21,
-                    })
-
-                    local valueLabel = newInstance("TextLabel", {
-                        Text = tostring(value),
-                        Font = Enum.Font.Gotham,
-                        TextSize = 14,
-                        TextColor3 = Color3.fromRGB(230,230,230),
-                        BackgroundTransparency = 1,
-                        Size = UDim2.new(0.3, -10, 1, 0),
-                        Position = UDim2.new(0.7, 0, 0, 0),
-                        TextXAlignment = Enum.TextXAlignment.Right,
-                        Parent = el,
-                        ZIndex = 21,
-                    })
-
-                    local sliderBar = newInstance("Frame", {
-                        Size = UDim2.new(0.7, 0, 0, 6),
-                        Position = UDim2.new(0.15, 0, 0.6, 0),
-                        BackgroundColor3 = Color3.fromRGB(50, 50, 80),
-                        BorderSizePixel = 0,
-                        Parent = el,
-                        ZIndex = 21,
-                        Name = "SliderBar"
-                    })
-
-                    local sliderFill = newInstance("Frame", {
-                        Size = UDim2.new((value-min)/(max-min) * 0.7, 0, 1, 0),
-                        BackgroundColor3 = Color3.fromRGB(100, 150, 255),
-                        BorderSizePixel = 0,
-                        Parent = sliderBar,
-                        ZIndex = 22,
-                        Name = "SliderFill"
-
-                            -- Helper function
-local function newInstance(className, properties)
-    local inst = Instance.new(className)
-    for prop, val in pairs(properties) do
-        inst[prop] = val
-    end
-    return inst
-end
-
--- Slider element yapısı (sliderFill ile devam)
-local function createSlider(parent, min, max, default, callback)
-    local container = newInstance("Frame", {
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundTransparency = 1,
-        Parent = parent,
-        ZIndex = 20,
-    })
-
-    local label = newInstance("TextLabel", {
-        Size = UDim2.new(0.3, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Text = "Slider",
-        TextColor3 = Color3.fromRGB(230, 230, 230),
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container,
-        ZIndex = 21,
-    })
-
-    local sliderBar = newInstance("Frame", {
-        Size = UDim2.new(0.7, 0, 0.4, 0),
-        Position = UDim2.new(0.3, 0, 0.3, 0),
-        BackgroundColor3 = Color3.fromRGB(50, 50, 50),
-        BorderSizePixel = 0,
-        Parent = container,
-        ZIndex = 21,
-        Name = "SliderBar",
-        ClipsDescendants = true,
-        AnchorPoint = Vector2.new(0, 0),
-    })
-
-    local sliderFill = newInstance("Frame", {
-        Size = UDim2.new((default - min) / (max - min) * 1, 0, 1, 0),
-        BackgroundColor3 = Color3.fromRGB(100, 150, 255),
-        BorderSizePixel = 0,
-        Parent = sliderBar,
-        ZIndex = 22,
-        Name = "SliderFill",
-    })
-
-    local sliderHandle = newInstance("Frame", {
-        Size = UDim2.new(0, 14, 0, 28),
-        Position = UDim2.new((default - min) / (max - min), -7, 0, -14),
-        BackgroundColor3 = Color3.fromRGB(150, 200, 255),
-        BorderSizePixel = 0,
-        Parent = sliderBar,
-        ZIndex = 23,
-        Name = "SliderHandle",
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        ClipsDescendants = false,
-        Active = true,
-        Draggable = true,
-    })
-
-    local dragging = false
-
-    local function updateSlider(x)
-        local relativeX = math.clamp(x - sliderBar.AbsolutePosition.X, 0, sliderBar.AbsoluteSize.X)
-        local percent = relativeX / sliderBar.AbsoluteSize.X
-        sliderFill.Size = UDim2.new(percent, 0, 1, 0)
-        sliderHandle.Position = UDim2.new(percent, 0, 0.5, 0)
-        local value = math.floor(min + (max - min) * percent)
-        callback(value)
-    end
-
-    -- Mouse input handling for dragging slider
-    sliderHandle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-        end
-    end)
-
-    sliderHandle.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            updateSlider(input.Position.X)
-        end
-    end)
-
-    -- Ayrıca sliderBar üstüne de tıklanarak direkt değer ayarlanabilir
-    sliderBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            updateSlider(input.Position.X)
-        end
-    end)
-
-    -- Başlangıçta callback çağrısı ile default değeri bildir
-    callback(default)
-
-    return container
-end
-
--- Dropdown için (basit, ZIndex düzgün, seçenekler üstte gözükür)
-local function createDropdown(parent, options, default, callback)
-    local container = newInstance("Frame", {
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundTransparency = 1,
-        Parent = parent,
-        ZIndex = 20,
-    })
-
-    local label = newInstance("TextLabel", {
-        Size = UDim2.new(0.3, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Text = "Dropdown",
-        TextColor3 = Color3.fromRGB(230, 230, 230),
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container,
-        ZIndex = 21,
-    })
-
-    local dropdownButton = newInstance("TextButton", {
-        Size = UDim2.new(0.7, 0, 1, 0),
-        Position = UDim2.new(0.3, 0, 0, 0),
-        BackgroundColor3 = Color3.fromRGB(50, 50, 50),
-        BorderSizePixel = 0,
-        Text = default or options[1],
-        TextColor3 = Color3.fromRGB(230, 230, 230),
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        Parent = container,
-        ZIndex = 21,
-        AutoButtonColor = false,
-    })
-
-    local optionsFrame = newInstance("Frame", {
-        Size = UDim2.new(0.7, 0, 0, #options * 25),
-        Position = UDim2.new(0.3, 0, 1, 2),
-        BackgroundColor3 = Color3.fromRGB(40, 40, 40),
-        BorderSizePixel = 0,
-        Visible = false,
-        Parent = container,
-        ZIndex = 50,
-        ClipsDescendants = true,
-    })
-
-    local layout = Instance.new("UIListLayout")
-    layout.Parent = optionsFrame
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 2)
-
-    for i, option in ipairs(options) do
-        local optBtn = newInstance("TextButton", {
-            Size = UDim2.new(1, 0, 0, 23),
-            BackgroundColor3 = Color3.fromRGB(60, 60, 60),
-            BorderSizePixel = 0,
-            Text = option,
-            TextColor3 = Color3.fromRGB(220, 220, 220),
-            Font = Enum.Font.Gotham,
-            TextSize = 14,
-            Parent = optionsFrame,
-            ZIndex = 51,
-            AutoButtonColor = false,
-        })
-
-        optBtn.MouseEnter:Connect(function()
-            optBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 150)
-        end)
-
-        optBtn.MouseLeave:Connect(function()
-            optBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-        end)
-
-        optBtn.MouseButton1Click:Connect(function()
-            dropdownButton.Text = option
-            optionsFrame.Visible = false
-            callback(option)
-        end)
-    end
-
-    dropdownButton.MouseButton1Click:Connect(function()
-        optionsFrame.Visible = not optionsFrame.Visible
-    end)
-
-    -- Dropdown menüsü açıkken başka yere tıklayınca kapanması için:
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if optionsFrame.Visible and input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local mousePos = UserInputService:GetMouseLocation()
-            local absPos = optionsFrame.AbsolutePosition
-            local absSize = optionsFrame.AbsoluteSize
-            if not (mousePos.X >= absPos.X and mousePos.X <= absPos.X + absSize.X and
-                    mousePos.Y >= absPos.Y and mousePos.Y <= absPos.Y + absSize.Y) then
-                optionsFrame.Visible = false
+            function sectionData:new_button(text, callback)
+                local button = newInstance("TextButton", {
+                    Text = text,
+                    Font = Enum.Font.Gotham,
+                    TextSize = 14,
+                    TextColor3 = Color3.fromRGB(230,230,230),
+                    BackgroundColor3 = Color3.fromRGB(70, 70, 110),
+                    Size = UDim2.new(1, 0, 0, 30),
+                    Parent = sectionFrame,
+                    ZIndex = 12,
+                    Name = "Button_"..text,
+                    AutoButtonColor = false,
+                })
+                newInstance("UICorner", { CornerRadius = UDim.new(0, 4) }, button)
+                
+                button.MouseEnter:Connect(function() button.BackgroundColor3 = Color3.fromRGB(85, 85, 130) end)
+                button.MouseLeave:Connect(function() button.BackgroundColor3 = Color3.fromRGB(70, 70, 110) end)
+                button.MouseButton1Click:Connect(function()
+                    if callback then callback() end
+                end)
+                return button
             end
+            
+            function sectionData:new_toggle(text, default, callback)
+                local toggled = default or false
+                
+                local toggleButton = newInstance("TextButton", {
+                    Size = UDim2.new(1, 0, 0, 24),
+                    BackgroundTransparency = 1,
+                    Text = "",
+                    AutoButtonColor = false,
+                    Parent = sectionFrame,
+                    ZIndex = 12,
+                    Name = "Toggle_"..text,
+                })
+
+                local label = newInstance("TextLabel", {
+                    Text = text,
+                    Font = Enum.Font.Gotham,
+                    TextSize = 14,
+                    TextColor3 = Color3.fromRGB(230,230,230),
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, -34, 1, 0),
+                    Position = UDim2.new(0, 0, 0, 0),
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = toggleButton,
+                    ZIndex = 13,
+                })
+
+                local box = newInstance("Frame", {
+                    Size = UDim2.new(0, 24, 0, 24),
+                    Position = UDim2.new(1, -24, 0, 0),
+                    BackgroundColor3 = toggled and Color3.fromRGB(100, 150, 255) or Color3.fromRGB(70, 70, 110),
+                    BorderSizePixel = 0,
+                    Parent = toggleButton,
+                    ZIndex = 13,
+                    Name = "ToggleBox"
+                })
+                newInstance("UICorner", { CornerRadius = UDim.new(0, 4) }, box)
+
+                local check = newInstance("TextLabel", {
+                    Text = "✓", Font = Enum.Font.GothamBold, TextSize = 20,
+                    TextColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = 1,
+                    Visible = toggled, Size = UDim2.new(1, 0, 1, 0), Parent = box, ZIndex = 14, Name = "Checkmark"
+                })
+
+                toggleButton.MouseButton1Click:Connect(function()
+                    toggled = not toggled
+                    box:TweenSize(UDim2.new(0, 24, 0, 24), "Out", "Quad", 0.1, true)
+                    box.BackgroundColor3 = toggled and Color3.fromRGB(100,150,255) or Color3.fromRGB(70,70,110)
+                    check.Visible = toggled
+                    if callback then callback(toggled) end
+                end)
+                return {IsToggled = function() return toggled end}
+            end
+
+            function sectionData:new_slider(text, min, max, default, callback)
+                min, max = min or 0, max or 100
+                local value = default or min
+                local dragging = false
+
+                local el = newInstance("Frame", {
+                    Size = UDim2.new(1, 0, 0, 40),
+                    BackgroundTransparency = 1,
+                    Parent = sectionFrame,
+                    ZIndex = 20,
+                    Name = "Slider_"..text,
+                })
+
+                local label = newInstance("TextLabel", {
+                    Text = text, Font = Enum.Font.Gotham, TextSize = 14, TextColor3 = Color3.fromRGB(230,230,230),
+                    BackgroundTransparency = 1, Size = UDim2.new(0.7, 0, 0, 20), TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = el, ZIndex = 21,
+                })
+
+                local valueLabel = newInstance("TextLabel", {
+                    Text = tostring(math.floor(value)), Font = Enum.Font.Gotham, TextSize = 14, TextColor3 = Color3.fromRGB(230,230,230),
+                    BackgroundTransparency = 1, Size = UDim2.new(0.3, 0, 0, 20), Position = UDim2.new(0.7, 0, 0, 0),
+                    TextXAlignment = Enum.TextXAlignment.Right, Parent = el, ZIndex = 21,
+                })
+                
+                local sliderBase = newInstance("Frame", {
+                    Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 24),
+                    BackgroundColor3 = Color3.fromRGB(50, 50, 80), BorderSizePixel = 0, Parent = el, ZIndex = 21, Name = "SliderBase"
+                })
+                newInstance("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderBase)
+
+                local sliderFill = newInstance("Frame", {
+                    Size = UDim2.new((value-min)/(max-min), 0, 1, 0), BackgroundColor3 = Color3.fromRGB(100, 150, 255),
+                    BorderSizePixel = 0, Parent = sliderBase, ZIndex = 22, Name = "SliderFill"
+                })
+                newInstance("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderFill)
+
+                local sliderHandle = newInstance("Frame", {
+                    Size = UDim2.new(0, 16, 0, 16), AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.new((value-min)/(max-min), 0, 0.5, 0),
+                    BackgroundColor3 = Color3.fromRGB(255, 255, 255), BorderSizePixel = 0,
+                    Parent = sliderBase, ZIndex = 23, Name = "SliderHandle"
+                })
+                newInstance("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderHandle)
+
+                local function updateSlider(input)
+                    local railAbsX = sliderBase.AbsolutePosition.X
+                    local railAbsWidth = sliderBase.AbsoluteSize.X
+                    local mouseX = input.Position.X
+                    
+                    local percent = math.clamp((mouseX - railAbsX) / railAbsWidth, 0, 1)
+                    value = min + (max - min) * percent
+                    
+                    sliderFill.Size = UDim2.new(percent, 0, 1, 0)
+                    sliderHandle.Position = UDim2.new(percent, 0, 0.5, 0)
+                    valueLabel.Text = tostring(math.floor(value))
+                    
+                    if callback then callback(math.floor(value)) end
+                end
+                
+                sliderBase.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        dragging = true
+                        updateSlider(input)
+                    end
+                end)
+                
+                UserInputService.InputChanged:Connect(function(input)
+                    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                        updateSlider(input)
+                    end
+                end)
+                
+                UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        dragging = false
+                    end
+                end)
+
+                return { SetValue = function(v) 
+                    value = math.clamp(v, min, max)
+                    local percent = (value-min)/(max-min)
+                    sliderFill.Size = UDim2.new(percent, 0, 1, 0)
+                    sliderHandle.Position = UDim2.new(percent, 0, 0.5, 0)
+                    valueLabel.Text = tostring(math.floor(value))
+                end }
+            end
+            
+            function sectionData:new_textbox(text, default, callback)
+                local el = newInstance("Frame", {
+                    Size = UDim2.new(1, 0, 0, 30),
+                    BackgroundTransparency = 1,
+                    Parent = sectionFrame,
+                    ZIndex = 12,
+                    Name = "TextBox_"..text,
+                })
+                
+                local label = newInstance("TextLabel", {
+                    Text = text, Font = Enum.Font.Gotham, TextSize = 14, TextColor3 = Color3.fromRGB(230,230,230),
+                    BackgroundTransparency = 1, Size = UDim2.new(0.4, -5, 1, 0), TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = el, ZIndex = 13,
+                })
+                
+                local box = newInstance("TextBox", {
+                    Text = default or "", Font = Enum.Font.Gotham, TextSize = 14, TextColor3 = Color3.fromRGB(220,220,220),
+                    BackgroundColor3 = Color3.fromRGB(70, 70, 110), BorderSizePixel = 0,
+                    Size = UDim2.new(0.6, -5, 1, 0), Position = UDim2.new(0.4, 5, 0, 0),
+                    ClearTextOnFocus = false, Parent = el, ZIndex = 13, Name = "InputBox"
+                })
+                newInstance("UICorner", { CornerRadius = UDim.new(0, 4) }, box)
+                
+                box.FocusLost:Connect(function(enterPressed)
+                    if enterPressed then
+                        if callback then callback(box.Text) end
+                    end
+                end)
+
+                return { GetText = function() return box.Text end, SetText = function(t) box.Text = t end }
+            end
+
+            return sectionData
         end
-    end)
-
-    return container
-end
-
--- Toggle örneği
-local function createToggle(parent, default, callback)
-    local container = newInstance("Frame", {
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundTransparency = 1,
-        Parent = parent,
-        ZIndex = 20,
-    })
-
-    local label = newInstance("TextLabel", {
-        Size = UDim2.new(0.7, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Text = "Toggle",
-        TextColor3 = Color3.fromRGB(230, 230, 230),
-        Font = Enum.Font.Gotham,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container,
-        ZIndex = 21,
-    })
-
-    local toggleBtn = newInstance("TextButton", {
-        Size = UDim2.new(0.3, -5, 0.6, 0),
-        Position = UDim2.new(0.7, 5, 0.2, 0),
-        BackgroundColor3 = default and Color3.fromRGB(0, 120, 255) or Color3.fromRGB(70, 70, 70),
-        BorderSizePixel = 0,
-        Text = "",
-        Parent = container,
-        ZIndex = 22,
-        AutoButtonColor = false,
-    })
-
-    local toggled = default
-
-    toggleBtn.MouseButton1Click:Connect(function()
-        toggled = not toggled
-        toggleBtn.BackgroundColor3 = toggled and Color3.fromRGB(0, 120, 255) or Color3.fromRGB(70, 70, 70)
-        callback(toggled)
-    end)
-
-    return container
-end
-
--- Menü gizleme toggle (RightShift)
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.RightShift then
-        local gui = game.Players.LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("ModernMenu")
-        if gui then
-            gui.Enabled = not gui.Enabled
-        end
+        return tabData
     end
-end)
 
--- Örnek kullanım (kendi library içinde replace edilir)
-local screenGui = Instance.new("ScreenGui", game.Players.LocalPlayer:WaitForChild("PlayerGui"))
-screenGui.Name = "ModernMenu"
+    function self:Toggle()
+        mainFrame.Visible = not mainFrame.Visible
+    end
 
-local frame = newInstance("Frame", {
-    Size = UDim2.new(0, 300, 0, 200),
-    Position = UDim2.new(0.5, -150, 0.5, -100),
-    BackgroundColor3 = Color3.fromRGB(25, 25, 25),
-    BorderSizePixel = 0,
-    Parent = screenGui,
-    Active = true,
-    Draggable = true,
-})
+    return self
+end
 
-local slider = createSlider(frame, 0, 100, 50, function(value)
-    print("Slider value:", value)
-end)
-slider.Position = UDim2.new(0, 10, 0, 10)
-slider.Parent = frame
-
-local dropdown = createDropdown(frame, {"Top", "Center", "Bottom"}, "Center", function(value)
-    print("Dropdown selected:", value)
-end)
-dropdown.Position = UDim2.new(0, 10, 0, 60)
-dropdown.Parent = frame
-
-local toggle = createToggle(frame, false, function(value)
-    print("Toggle value:", value)
-end)
-toggle.Position = UDim2.new(0, 10, 0, 110)
-toggle.Parent = frame
-
+return SimpleUI
